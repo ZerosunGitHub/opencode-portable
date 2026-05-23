@@ -124,3 +124,20 @@ musl 与 Ubuntu 原生库不兼容，普通用户**仅使用 glibc 版**即可�
    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=zeronesun/opencode-portable&type=date&legend=top-left" />
  </picture>
 </a>
+## 📦 下载地址
+
+### Linux 版本
+| 架构 | 版本 | 下载链接 |
+|------|------|----------|
+|  | glibc (主流系统) | [下载](https://github.com/zeronesun/opencode-portable/releases/download/v1.15.10-portable/opencode-v1.15.10-portable-linux--glibc-arm64.tar.gz) |
+|  | glibc (主流系统) | [下载](https://github.com/zeronesun/opencode-portable/releases/download/v1.15.10-portable/opencode-v1.15.10-portable-linux--glibc-x64.tar.gz) |
+|  | musl (旧系统/NAS) | [下载](https://github.com/zeronesun/opencode-portable/releases/download/v1.15.10-portable/opencode-v1.15.10-portable-linux--musl-arm64.tar.gz) |
+|  | musl (旧系统/NAS) | [下载](https://github.com/zeronesun/opencode-portable/releases/download/v1.15.10-portable/opencode-v1.15.10-portable-linux--musl-x64.tar.gz) |
+
+### Windows 版本
+| 运行时 | 支持系统 | 下载链接 |
+|--------|----------|----------|
+| Node.js | Windows 7/8/8.1/10/11 | [下载](https://github.com/zeronesun/opencode-portable/releases/download/v1.15.10-portable/opencode-v1.15.10-portable-windows-legacy-x64.tar.gz) |
+| Bun | Windows 10 1809+/11 | [下载](https://github.com/zeronesun/opencode-portable/releases/download/v1.15.10-portable/opencode-v1.15.10-portable-windows-modern-x64.tar.gz) |
+
+📝 使用说明：解压后直接运行对应脚本即可，无需安装任何依赖
