@@ -132,18 +132,18 @@ opencode
 所有版本均已发布到 [GitHub Releases](https://github.com/zeronesun/opencode-portable/releases)
 
 ### Linux 版本
-| 架构 | 版本 | 下载链接 |
+| 架构 | 版本 |
 |------|------|----------|
-| x64 (Intel/AMD) | glibc (主流系统) | [下载](https://github.com/zeronesun/opencode-portable/releases/download/v1.15.10-portable/opencode-v1.15.10-portable-linux-glibc-x64.tar.gz) |
-| x64 (Intel/AMD) | musl (旧系统/NAS) | [下载](https://github.com/zeronesun/opencode-portable/releases/download/v1.15.10-portable/opencode-v1.15.10-portable-linux-musl-x64.tar.gz) |
-| arm64 (树莓派/ARM服务器) | glibc (主流系统) | [下载](https://github.com/zeronesun/opencode-portable/releases/download/v1.15.10-portable/opencode-v1.15.10-portable-linux-glibc-arm64.tar.gz) |
-| arm64 (树莓派/ARM服务器) | musl (旧系统/NAS) | [下载](https://github.com/zeronesun/opencode-portable/releases/download/v1.15.10-portable/opencode-v1.15.10-portable-linux-musl-arm64.tar.gz) |
+| x64 (Intel/AMD) | glibc (主流系统) |
+| x64 (Intel/AMD) | musl (旧系统/NAS) |
+| arm64 (树莓派/ARM服务器) | glibc (主流系统) |
+| arm64 (树莓派/ARM服务器) | musl (旧系统/NAS) |
 
 ### Windows 版本
-| 运行时 | 支持系统 | 下载链接 |
-|--------|----------|----------|
-| Bun | Windows 10 1809+/11 | [下载](https://github.com/zeronesun/opencode-portable/releases/download/v1.15.10-portable/opencode-v1.15.10-portable-windows-modern-x64.tar.gz) |
-| Node.js | Windows 7/8/8.1/10/11 | [下载](https://github.com/zeronesun/opencode-portable/releases/download/v1.15.10-portable/opencode-v1.15.10-portable-windows-legacy-x64.tar.gz) |
+| 运行时 | 支持系统 |
+|--------|----------|
+| Bun | Windows 10 1809+/11 |
+| Node.js | Windows 7/8/8.1/10/11 |
 
 📝 **Windows 使用说明**：
 - 解压后直接运行 `opencode.bat` 即可
