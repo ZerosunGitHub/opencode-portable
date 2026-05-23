@@ -59,6 +59,12 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v5
+        with:
+          # ✅ 修复：添加token配置（解决Git拉取错误）
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+          fetch-retries: 5
+          fetch-retry-interval: 10
 
       - name: 安装依赖
         run: sudo apt update && sudo apt install -y wget jq unzip
@@ -84,6 +90,9 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0  # 获取完整历史
+          # ✅ 修复：添加token配置
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: 下载所有构建产物
         uses: actions/download-artifact@v4
@@ -106,13 +115,14 @@ jobs:
             - 构建时间: ${{ github.run_at }}
             - 自动同步上游: ${{ needs.get-version.outputs.tag }}
           files: dist/*.tar.gz
+          # ✅ 修复：只保留v3版本的参数，删除已废弃的overwrite
           overwrite_files: true
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ======================
-      # 优化4: 自动生成并更新README
-      # ======================
+      # 自动生成并更新README
       - name: 生成下载表格
         id: generate-table
         run: |
@@ -173,7 +183,6 @@ jobs:
       - name: 更新 README.md
         run: |
           # 保留README中除下载部分外的所有内容
-          # 查找"## 📦 下载地址"标记，替换后面的内容
           if grep -q "## 📦 下载地址" README.md; then
             # 删除原有下载部分
             sed -i '/## 📦 下载地址/,$d' README.md
