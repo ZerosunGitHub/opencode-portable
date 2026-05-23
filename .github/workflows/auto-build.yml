@@ -1,60 +1,101 @@
 name: Auto Build & Release
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # 手动触发
   schedule:
-  - cron: '0,30 * * * *'
+    - cron: '0 0 * * *'  # 每天0点执行（原每30分钟太频繁，按需调整）
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30  # 超时时间（防止卡死）
     steps:
-      - uses: actions/checkout@v5
+      - name: 检出代码
+        uses: actions/checkout@v5
 
-      - name: Install dependencies
-        run: sudo apt update && sudo apt install -y wget
+      - name: 安装依赖（wget/jq/unzip）
+        run: |
+          sudo apt update && sudo apt install -y wget jq unzip
+          # 验证依赖
+          wget --version | head -n1
+          jq --version
+          unzip -v
 
-      - name: Get latest official version
+      - name: 获取官方最新版本号
         id: upstream
         run: |
-          TAG=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | jq -r '.tag_name')
+          # 容错：如果API访问失败，重试3次
+          for i in {1..3}; do
+            TAG=$(curl -s --retry 3 https://api.github.com/repos/anomalyco/opencode/releases/latest | jq -r '.tag_name')
+            if [ "$TAG" != "null" ] && [ -n "$TAG" ]; then
+              break
+            fi
+            echo "⚠️ 第 $i 次获取版本失败，重试..."
+            sleep 5
+          done
+          # 校验版本号是否有效
+          if [ "$TAG" = "null" ] || [ -z "$TAG" ]; then
+            echo "❌ 无法获取官方最新版本号"
+            exit 1
+          fi
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
+          echo "✅ 获取到官方最新版本：$TAG"
 
-      # 构建 普通版 x64（强制传递 normal 参数）
-      - name: Build normal x86_64
+      # ======================
+      # Linux 版本构建
+      # ======================
+      - name: 构建 Linux (normal-glibc) x64
         run: |
           chmod +x build/build.sh
           ./build/build.sh ${{ steps.upstream.outputs.TAG }} x86_64 normal
 
-      # 构建 普通版 arm64
-      - name: Build normal arm64
-        run: |
-          ./build/build.sh ${{ steps.upstream.outputs.TAG }} arm64 normal
+      - name: 构建 Linux (normal-glibc) arm64
+        run: ./build/build.sh ${{ steps.upstream.outputs.TAG }} arm64 normal
 
-      # 构建 musl版 x64
-      - name: Build musl x86_64
-        run: |
-          ./build/build.sh ${{ steps.upstream.outputs.TAG }} x86_64 musl
+      - name: 构建 Linux (musl) x64
+        run: ./build/build.sh ${{ steps.upstream.outputs.TAG }} x86_64 musl
 
-      # 构建 musl版 arm64
-      - name: Build musl arm64
-        run: |
-          ./build/build.sh ${{ steps.upstream.outputs.TAG }} arm64 musl
+      - name: 构建 Linux (musl) arm64
+        run: ./build/build.sh ${{ steps.upstream.outputs.TAG }} arm64 musl
+
       # ======================
-      # 新增：Windows 双版本构建
+      # Windows 版本构建
       # ======================
-      - name: Build Windows Modern (Win10+, Bun)
+      - name: 构建 Windows Modern (Win10+, Bun) x64
         run: ./build/build.sh ${{ steps.upstream.outputs.TAG }} x64 modern
 
-      - name: Build Windows Legacy (Win7/8/8.1, Node.js)
+      - name: 构建 Windows Legacy (Win7/8, Node.js) x64
         run: ./build/build.sh ${{ steps.upstream.outputs.TAG }} x64 legacy
-        
-      # 自动发布所有包
-      - name: Create GitHub Release
+
+      # ======================
+      # 发布到 GitHub Release
+      # ======================
+      - name: 列出构建产物
+        run: |
+          echo "📁 构建产物列表："
+          ls -lh dist/
+          # 校验产物是否存在
+          if [ $(ls -1 dist/*.tar.gz | wc -l) -eq 0 ]; then
+            echo "❌ 未找到任何构建产物"
+            exit 1
+          fi
+
+      - name: 创建/更新 GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.upstream.outputs.TAG }}-portable
           name: OpenCode ${{ steps.upstream.outputs.TAG }} (Portable)
+          body: |
+            🚀 自动构建的便携版 OpenCode
+            - Linux：支持 x64/arm64，分 glibc/musl 版本
+            - Windows：支持 Win7+，自动适配 Bun/Node.js 运行时
+            - 构建时间：${{ github.run_at }}
           files: dist/*.tar.gz
+          draft: false
+          prerelease: false
+          overwrite: true  # 覆盖同名Tag的Release（避免重复发布失败）
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
