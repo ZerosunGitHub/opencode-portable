@@ -96,6 +96,6 @@ jobs:
           files: dist/*.tar.gz
           draft: false
           prerelease: false
-          overwrite: true  # 覆盖同名Tag的Release（避免重复发布失败）
+          overwrite_files: true  # 覆盖同名Tag的Release（避免重复发布失败）
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
