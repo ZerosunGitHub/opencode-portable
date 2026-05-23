@@ -100,7 +100,7 @@ jobs:
           tag_name: ${{ needs.get-version.outputs.tag }}-portable
           name: OpenCode ${{ needs.get-version.outputs.tag }} (Portable)
           body: |
-            🚀 自动构建便携版
+            🚀 便携版
             - Linux x64/arm64 (glibc/musl)
             - Windows x64 (Bun / Node.js)
           files: dist/*.tar.gz
