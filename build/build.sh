@@ -48,3 +48,57 @@ rm -rf tmp extracted opencode
 echo "✅ 构建完成！"
 echo "📦 输出文件：${FINAL_FILENAME}"
 echo "========================================"
+
+# ======================
+# 新增：Windows 便携版构建（Bun + Node.js 双运行时）
+# ======================
+build_windows() {
+  local TAG=$1
+  local ARCH=$2  # 固定 x64（Windows 主流）
+  local RUNTIME=$3  # modern(bun) / legacy(node)
+
+  mkdir -p dist/opencode-windows-$RUNTIME-x64/runtime
+  cd dist/opencode-windows-$RUNTIME-x64
+
+  # 1. 下载官方 OpenCode CLI
+  wget -q https://github.com/anomalyco/opencode/archive/refs/tags/$TAG.tar.gz
+  tar xf $TAG.tar.gz --strip 1
+  rm -f $TAG.tar.gz
+
+  # 2. 下载对应运行时（便携版，免安装）
+  if [ "$RUNTIME" = "modern" ]; then
+    # Win10+ : Bun 便携版
+    wget -q https://github.com/oven-sh/bun/releases/latest/download/bun-windows-x64.zip
+    unzip -q bun-windows-x64.zip -d runtime/bun
+    rm -f bun-windows-x64.zip
+  else
+    # Win7/8/8.1 : Node.js 18 LTS (最后支持旧版Windows)
+    wget -q https://nodejs.org/dist/v18.20.4/node-v18.20.4-win-x64.zip
+    unzip -q node-v18.20.4-win-x64.zip -d runtime/node
+    rm -f node-v18.20.4-win-x64.zip
+  fi
+
+  # 3. 生成 Windows 自动启动脚本（核心：自动识别系统版本）
+  cat > opencode.bat << 'EOF'
+@echo off
+setlocal enabledelayedexpansion
+
+:: 自动检测 Windows 版本
+for /f "tokens=2 delims=[]" %%i in ('ver') do set version=%%i
+if "!version!" geq "10.0.17763" (
+    :: Win10+ 使用 Bun
+    echo Running on Windows 10+ with Bun runtime...
+    runtime\bun\bun.exe index.js %*
+) else (
+    :: Win7/8/8.1 使用 Node.js
+    echo Running on Windows 7/8 with Node.js runtime...
+    runtime\node\node.exe index.js %*
+)
+EOF
+
+  # 4. 打包压缩
+  cd ..
+  tar -zcf opencode-windows-$RUNTIME-x64.tar.gz opencode-windows-$RUNTIME-x64
+  rm -rf opencode-windows-$RUNTIME-x64
+  cd ../..
+}
