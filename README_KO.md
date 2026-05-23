@@ -1,82 +1,120 @@
+# opencode-portable
 [English](README_EN.md) | [简体中文](README.md) | [繁體中文](README_ZH_TW.md) | 한국어
 
-# opencode-portable
-OpenCode의 타사 이식 가능한 빌드 버전으로, [anomalyco/opencode](https://github.com/anomalyco/opencode) 업스트림 최신 버전을 자동으로 동기화합니다.  
-**glibc/musl 이중 빌드 + x86_64/arm64 이중 아키텍처**를 제공하며, 모든 주요 Linux 배포판과 호환됩니다. 압축 해제 후 즉시 사용 가능하며, 컴파일이 필요하지 않습니다.
+공식 [anomalyco/opencode](https://github.com/anomalyco/opencode)를 기반으로 제작된 휴대용 버전입니다. **Linux glibc/musl 듀얼 버전 + x86_64/arm64 듀얼 아키텍처 + Windows 듀얼 런타임**을 완벽하게 지원하며 모든 플랫폼을 커버합니다. 압축만 해제하면 바로 사용할 수 있으며 별도의 컴파일 환경이 필요하지 않습니다.
+
+공식 [anomalyco/opencode](https://github.com/anomalyco/opencode) 상위 저장소의 최신 버전을 자동으로 동기화합니다.
 
 ---
 
-## ✨ 기능 특징
-- **업스트림 자동 동기화**: 매시간 공식 업데이트를 확인하고, 자동으로 빌드 및 새 버전을 출시합니다.
-- **이중 빌드 변형**:
-  - `glibc`: Ubuntu/Debian 및 주요 Linux에서 즉시 사용 가능
-  - `musl`: 정적 링크로, CentOS 7 및 NAS 장치와 같은 레거시 시스템과 호환됩니다.
-- **멀티 아키텍처 지원**: x86_64 + arm64 플랫폼을 완전히 지원합니다.
-- **이식성 제로 의존성**: 표준 디렉토리 구조로, 공식 CLI와 완전히 호환됩니다.
-- **Mise 버전 관리 지원**: 원클릭 설치 / 전환 / 업그레이드가 가능합니다.
+## ✨ 주요 기능
+- **자동 상위 저장소 동기화**: 매일 공식 업데이트를 자동으로 감지하여 최신 버전을 빌드하고 릴리즈합니다
+- **전 플랫폼 지원**:
+  - **Linux**: x86_64/arm64 듀얼 아키텍처, glibc/musl 듀얼 버전
+  - **Windows**: x64 아키텍처, Bun/Node.js 듀얼 런타임
+- **제로 의존성 휴대용 패키징**: 통일된 디렉토리 구조로 공식 명령어와 완벽하게 호환됩니다
+- **mise 버전 관리 지원**: 한 번의 클릭으로 설치/전환/업데이트가 가능합니다
+- **즉시 사용 가능**: Node.js, Bun 또는 기타 어떤 의존성도 설치할 필요가 없습니다
 
 ---
 
-## 📦 설치 방법 (하나 선택)
+## 🆚 공식 버전과의 차이점
+| 기능 | 공식 버전 | 이 휴대용 버전 |
+|------|----------|----------------|
+| 의존성 요구사항 | Node.js 또는 Bun 설치 필요 | 완전 제로 의존성, 런타임 내장 |
+| 시스템 지원 | 주류 시스템만 지원 | CentOS 7, NAS 등 구식 시스템 지원 |
+| 아키텍처 지원 | 일부 아키텍처만 지원 | x86_64 + arm64 전 아키텍처 지원 |
+| 설치 방식 | npm/brew 등 패키지 매니저 | 직접 압축 해제하여 사용 |
+| 업데이트 주기 | 공식 릴리즈 주기 | 매일 자동으로 최신 버전 동기화 |
 
-### 옵션 1: mise를 통한 설치 (권장 ✅)
+---
 
-1. mise 설치
+## 📦 설치 방법 (세 가지 방법 중 선택)
+
+### 방법 1: mise로 한 번에 설치 (Linux/macOS 권장 ✅)
+
+1. mise 도구 설치
+
 ```bash
 curl https://mise.run | sh
 ```
 
-2. 셸에서 mise 활성화
+2. mise 환경 적용
 ```bash
+# Bash
 echo 'eval "$(~/.local/bin/mise activate bash)"' >> ~/.bashrc
 source ~/.bashrc
+
+# Zsh
+echo 'eval "$(~/.local/bin/mise activate zsh)"' >> ~/.zshrc
+source ~/.zshrc
+
+# Fish
+echo '~/.local/bin/mise activate fish | source' >> ~/.config/fish/config.fish
+source ~/.config/fish/config.fish
 ```
 
-3. 최신 opencode-portable 전역 설치
+3. 최신 버전 opencode-portable 전역 설치
+
 ```bash
 mise install github:zeronesun/opencode-portable@latest
 mise use -g opencode-portable@latest
 ```
 
 4. 설치 확인
+
 ```bash
 opencode --version
 which opencode
 ```
 
-### 옵션 2: 수동 설치 (버전 관리자 없이)
+### 방법 2: 수동 압축 해제 설치 (모든 플랫폼 공통)
 
-1. 폴더 생성 및 아카이브 압축 해제
+#### Linux
 ```bash
+# 디렉토리 생성
 mkdir -p ~/opencode-portable
-tar -xzf opencode-*-portable-linux-*.tar.gz -C ~/opencode-portable
-```
 
-2. PATH에 추가
-```bash
+# 압축 해제 (다운로드한 파일명으로 교체하세요)
+tar -xzf opencode-v1.15.10-portable-linux-glibc-x64.tar.gz -C ~/opencode-portable
+
+# 환경 변수에 추가
 echo 'export PATH="$HOME/opencode-portable/opencode/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-3. 설치 확인
+#### Windows
+1. 해당 버전의 압축 파일 다운로드
+2. 임의의 디렉토리에 압축 해제 (예: `C:\opencode-portable`)
+3. `C:\opencode-portable`를 시스템 환경 변수 `PATH`에 추가
+4. 새로운 명령 프롬프트 또는 PowerShell을 열어 사용하세요
+
+### 방법 3: 설치 없이 직접 실행
+
+#### Linux
 ```bash
-opencode --version
-which opencode
+# 다운로드 후 직접 실행
+tar -xzf opencode-v1.15.10-portable-linux-glibc-x64.tar.gz
+./opencode/bin/opencode
 ```
+
+#### Windows
+압축 해제한 디렉토리에서 `opencode.bat`을 더블 클릭하면 바로 실행됩니다.
 
 ---
 
-## ✅ 확인 단계 (모든 방법 공통)
-아래 명령어를 실행하여 설치가 성공적으로 완료되었는지 확인하세요:
+## ✅ 완전한 확인 단계 (모든 설치 방법 공통)
+다음 명령어를 실행하여 설치가 성공적으로 완료되었는지 확인하세요:
 
 버전 확인
 ```bash
 opencode --version
 ```
 
-바이너리 경로 확인
+프로그램 경로 확인
 ```bash
-which opencode
+which opencode  # Linux/macOS
+where opencode  # Windows
 ```
 
 직접 실행
@@ -86,33 +124,60 @@ opencode
 
 ---
 
-## ❌ ~/.local/bin에 심볼릭 링크를 사용하지 않는 이유
-`opencode`는 동일 폴더에 있는 바이너리에 의존하는 래퍼 스크립트입니다.
-스크립트만 심볼릭 링크하면 의존성 누락 오류가 발생합니다. 전체 bin 디렉토리를 PATH에 추가하는 것이 가장 안정적인 방법입니다.
+## ❌ ~/.local/bin에 소프트 링크를 권장하지 않는 이유
+`opencode`는 동일 디렉토리에 있는 바이너리 파일에 의존하는 스크립트 래퍼입니다.  
+스크립트만 소프트 링크하면 **의존성 파일을 찾을 수 없음** 오류가 발생합니다. 완전한 bin 디렉토리를 PATH에 추가하는 것이 가장 안정적인 솔루션입니다.
+
+---
+
+## 📦 다운로드 링크
+모든 버전은 [GitHub Releases](https://github.com/zeronesun/opencode-portable/releases)에 게시되어 있습니다
+
+### Linux 버전
+| 아키텍처 | 버전 |
+|---------|------|
+| x64 (Intel/AMD) | glibc (주류 시스템) |
+| x64 (Intel/AMD) | musl (구식 시스템/NAS) |
+| arm64 (라즈베리파이/ARM 서버) | glibc (주류 시스템) |
+| arm64 (라즈베리파이/ARM 서버) | musl (구식 시스템/NAS) |
+
+### Windows 버전
+| 런타임 | 지원 시스템 |
+|--------|------------|
+| Bun | Windows 10 1809+/11 |
+| Node.js | Windows 7/8/8.1/10/11 |
+
+📝 **Windows 사용 안내**:
+- 압축 해제 후 `opencode.bat`을 실행하기만 하면 됩니다
+- 스크립트가 자동으로 Windows 버전을 감지하여 적절한 런타임을 선택합니다
+- 별도의 소프트웨어 설치가 필요하지 않습니다
 
 ---
 
 ## ❓ 자주 묻는 질문
-### 1. 어떤 변형을 선택해야 합니까?
-- 주요 Linux (Ubuntu/Debian): **glibc** 빌드 사용
-- 레거시 / NAS 시스템: **musl** 빌드 사용
+### 1. 버전 선택
+- **주류 Linux (Ubuntu/Debian/Fedora)**: **glibc 버전**을 사용하세요
+- **구식 시스템/NAS (CentOS 7, 시놀로지, QNAP)**: **musl 버전**을 사용하세요
+- **Windows 10 1809+**: **Bun 버전**을 권장합니다 (시작 속도가 더 빠릅니다)
+- **Windows 7/8**: **Node.js 버전**을 사용해야 합니다
 
-### 2. Ubuntu에서 musl 빌드가 오류가 발생합니까?
-musl은 Ubuntu의 기본 glibc와 호환되지 않습니다. 일반 사용자는 **glibc** 버전만 사용해야 합니다.
+### 2. musl 버전이 Ubuntu에서 오류가 발생하나요?
+musl은 Ubuntu의 기본 라이브러리와 호환되지 않습니다. 일반 사용자는 **glibc 버전만 사용하시면 됩니다**.
 
-### 3. 업그레이드 방법은 무엇입니까?
-- mise 사용: `mise upgrade opencode-portable`
-- 수동: 최신 아카이브를 재다운로드하여 교체
+### 3. 업데이트 방법은?
+- **mise**: `mise upgrade opencode-portable`
+- **수동**: 최신 압축 파일을 다시 다운로드하여 기존 디렉토리를 교체하세요
+
+### 4. Windows 버전이 왜 이렇게 큰가요?
+제로 의존성으로 즉시 사용할 수 있도록 완전한 Node.js 또는 Bun 런타임이 내장되어 있기 때문입니다.
 
 ---
 
-## 📜 라이센스
-[anomalyco/opencode](https://github.com/anomalyco/opencode)를 기반으로 빌드되었으며, MIT 라이센스를 따릅니다.
+## 📜 라이선스
 
-## 📜 License
-基于官方 [anomalyco/opencode](https://github.com/anomalyco/opencode) 构建，遵循 MIT 协议
+MIT 라이선스를 따릅니다.
 
-## ⭐ Star History
+## Star History
 
 <a href="https://www.star-history.com/?repos=zeronesun%2Fopencode-portable&type=date&legend=top-left">
  <picture>
@@ -121,3 +186,10 @@ musl은 Ubuntu의 기본 glibc와 호환되지 않습니다. 일반 사용자는
    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=zeronesun/opencode-portable&type=date&legend=top-left" />
  </picture>
 </a>
+
+---
+
+## 🤝 기여
+Issue와 Pull Request를 환영합니다!
+
+이 프로젝트가 도움이 되었다면 Star ⭐를 눌러주세요.
