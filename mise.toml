@@ -1,25 +1,49 @@
 [plugin]
 name = "opencode-portable"
-repository = "https://github.com/ZerosunGitHub/opencode-portable"
-homepage = "https://github.com/ZerosunGitHub/opencode-portable"
-description = "OpenCode 官方原版 + CJK中文修复 + Musl静态编译适配旧GLIBC"
+repository = "https://github.com/zeronesun/opencode-portable"
+homepage = "https://github.com/zeronesun/opencode-portable"
+description = "OpenCode 第三方便携构建版，支持 Linux glibc/musl 双版本 + x86_64/arm64 双架构 + Windows 双运行时，零依赖开箱即用"
 
 [versions]
-latest = "https://api.github.com/repos/ZerosunGitHub/opencode-portable/releases/latest"
+latest = "https://api.github.com/repos/zeronesun/opencode-portable/releases/latest"
 
 [install]
 script = """
+# 检测操作系统
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+
 # 检测系统架构
 case "$(uname -m)" in
-  x86_64) ARCH="x86_64" ;;
+  x86_64|amd64) ARCH="x64" ;;
   aarch64|arm64) ARCH="arm64" ;;
-  *) echo "不支持的架构: $(uname -m)"; exit 1 ;;
+  *) echo "❌ 不支持的架构: $(uname -m)"; exit 1 ;;
 esac
 
-# 下载并解压
-curl -L "https://github.com/ZerosunGitHub/opencode-portable/releases/download/${version}/opencode-${version%-portable}-portable-linux-${ARCH}.tar.gz" | tar xz
+# 检测 libc 类型（自动选择 glibc/musl）
+if type ldd >/dev/null 2>&1; then
+  if ldd /bin/ls | grep -q 'musl'; then
+    LIBC="musl"
+  else
+    LIBC="glibc"
+  fi
+else
+  # 无法检测时默认使用 glibc
+  LIBC="glibc"
+fi
 
-# 安装到mise目录
-mv bin/* "${mise_path}/bin/"
-mv lib/* "${mise_path}/lib/"
+# 提取纯版本号（去掉 -portable 后缀）
+PURE_VERSION="${version%-portable}"
+
+echo "✅ 检测到系统: $OS $ARCH $LIBC"
+echo "✅ 正在下载版本: $PURE_VERSION"
+
+# 下载并解压对应版本
+curl -fL "https://github.com/zeronesun/opencode-portable/releases/download/${version}/opencode-${PURE_VERSION}-portable-linux-${LIBC}-${ARCH}.tar.gz" | tar xz
+
+# 安装到 mise 目录
+mkdir -p "${mise_path}/bin"
+mv opencode/bin/* "${mise_path}/bin/"
+chmod +x "${mise_path}/bin/opencode"
+
+echo "✅ 安装成功！"
 """
