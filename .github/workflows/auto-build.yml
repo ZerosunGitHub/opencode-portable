@@ -60,7 +60,6 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v5
         with:
-          # ✅ 修复：添加token配置（解决Git拉取错误）
           token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: false
           fetch-retries: 5
@@ -75,7 +74,7 @@ jobs:
           ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.arch }} ${{ matrix.type }}
 
       - name: 上传构建产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.4.3  # ✅ 更新到支持Node.js 24的版本
         with:
           name: ${{ matrix.os }}-${{ matrix.type }}-${{ matrix.arch }}
           path: dist/*.tar.gz
@@ -90,12 +89,11 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0  # 获取完整历史
-          # ✅ 修复：添加token配置
           token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: false
 
       - name: 下载所有构建产物
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.8  # ✅ 更新到支持Node.js 24的版本
         with:
           path: dist
           merge-multiple: true  # 合并所有产物到同一个目录
@@ -115,7 +113,6 @@ jobs:
             - 构建时间: ${{ github.run_at }}
             - 自动同步上游: ${{ needs.get-version.outputs.tag }}
           files: dist/*.tar.gz
-          # ✅ 修复：只保留v3版本的参数，删除已废弃的overwrite
           overwrite_files: true
           draft: false
           prerelease: false
@@ -202,6 +199,8 @@ jobs:
           
           git add README.md
           git commit -m "自动更新下载链接: ${{ needs.get-version.outputs.tag }}"
-          git push origin main
+          
+          # ✅ 修复：在URL中显式嵌入token进行身份验证
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
