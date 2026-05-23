@@ -133,7 +133,7 @@ opencode
 
 ### Linux 版本
 | 架构 | 版本 |
-|------|------|----------|
+|------|------|
 | x64 (Intel/AMD) | glibc (主流系统) |
 | x64 (Intel/AMD) | musl (旧系统/NAS) |
 | arm64 (树莓派/ARM服务器) | glibc (主流系统) |
