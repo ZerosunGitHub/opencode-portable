@@ -1,101 +1,198 @@
 name: Auto Build & Release
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *'  # 每天0点执行（原每30分钟太频繁，按需调整）
+    - cron: '0 0 * * *'  # 每天0点构建
 
 permissions:
-  contents: write
-  actions: read
+  contents: write  # 需要写入权限来更新README和发布Release
 
 jobs:
-  build:
+  # 步骤1: 获取最新版本号
+  get-version:
     runs-on: ubuntu-latest
-    timeout-minutes: 30  # 超时时间（防止卡死）
+    outputs:
+      tag: ${{ steps.get-tag.outputs.TAG }}
     steps:
-      - name: 检出代码
-        uses: actions/checkout@v5
-
-      - name: 安装依赖（wget/jq/unzip）
+      - name: 获取官方最新版本
+        id: get-tag
         run: |
-          sudo apt update && sudo apt install -y wget jq unzip
-          # 验证依赖
-          wget --version | head -n1
-          jq --version
-          unzip -v
-
-      - name: 获取官方最新版本号
-        id: upstream
-        run: |
-          # 容错：如果API访问失败，重试3次
           for i in {1..3}; do
             TAG=$(curl -s --retry 3 https://api.github.com/repos/anomalyco/opencode/releases/latest | jq -r '.tag_name')
             if [ "$TAG" != "null" ] && [ -n "$TAG" ]; then
               break
             fi
-            echo "⚠️ 第 $i 次获取版本失败，重试..."
             sleep 5
           done
-          # 校验版本号是否有效
-          if [ "$TAG" = "null" ] || [ -z "$TAG" ]; then
-            echo "❌ 无法获取官方最新版本号"
-            exit 1
-          fi
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
-          echo "✅ 获取到官方最新版本：$TAG"
+          echo "✅ 官方最新版本: $TAG"
 
-      # ======================
-      # Linux 版本构建
-      # ======================
-      - name: 构建 Linux (normal-glibc) x64
+  # 步骤2: 并行构建所有版本（矩阵构建）
+  build:
+    needs: get-version
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false  # 一个版本失败不影响其他版本
+      matrix:
+        include:
+          # Linux 版本
+          - os: linux
+            arch: x86_64
+            type: normal
+          - os: linux
+            arch: x86_64
+            type: musl
+          - os: linux
+            arch: arm64
+            type: normal
+          - os: linux
+            arch: arm64
+            type: musl
+          # Windows 版本
+          - os: windows
+            arch: x64
+            type: modern
+          - os: windows
+            arch: x64
+            type: legacy
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v5
+
+      - name: 安装依赖
+        run: sudo apt update && sudo apt install -y wget jq unzip
+
+      - name: 构建 ${{ matrix.os }} ${{ matrix.type }} ${{ matrix.arch }}
         run: |
           chmod +x build/build.sh
-          ./build/build.sh ${{ steps.upstream.outputs.TAG }} x86_64 normal
+          ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.arch }} ${{ matrix.type }}
 
-      - name: 构建 Linux (normal-glibc) arm64
-        run: ./build/build.sh ${{ steps.upstream.outputs.TAG }} arm64 normal
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-${{ matrix.type }}-${{ matrix.arch }}
+          path: dist/*.tar.gz
+          retention-days: 1  # 只保留1天，因为会发布到Release
 
-      - name: 构建 Linux (musl) x64
-        run: ./build/build.sh ${{ steps.upstream.outputs.TAG }} x86_64 musl
+  # 步骤3: 发布到GitHub Release + 自动更新README
+  release:
+    needs: [get-version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码（用于更新README）
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # 获取完整历史
 
-      - name: 构建 Linux (musl) arm64
-        run: ./build/build.sh ${{ steps.upstream.outputs.TAG }} arm64 musl
+      - name: 下载所有构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true  # 合并所有产物到同一个目录
 
-      # ======================
-      # Windows 版本构建
-      # ======================
-      - name: 构建 Windows Modern (Win10+, Bun) x64
-        run: ./build/build.sh ${{ steps.upstream.outputs.TAG }} x64 modern
-
-      - name: 构建 Windows Legacy (Win7/8, Node.js) x64
-        run: ./build/build.sh ${{ steps.upstream.outputs.TAG }} x64 legacy
-
-      # ======================
-      # 发布到 GitHub Release
-      # ======================
-      - name: 列出构建产物
-        run: |
-          echo "📁 构建产物列表："
-          ls -lh dist/
-          # 校验产物是否存在
-          if [ $(ls -1 dist/*.tar.gz | wc -l) -eq 0 ]; then
-            echo "❌ 未找到任何构建产物"
-            exit 1
-          fi
+      - name: 列出所有产物
+        run: ls -lh dist/
 
       - name: 创建/更新 GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ steps.upstream.outputs.TAG }}-portable
-          name: OpenCode ${{ steps.upstream.outputs.TAG }} (Portable)
+          tag_name: ${{ needs.get-version.outputs.tag }}-portable
+          name: OpenCode ${{ needs.get-version.outputs.tag }} (Portable)
           body: |
             🚀 自动构建的便携版 OpenCode
-            - Linux：支持 x64/arm64，分 glibc/musl 版本
-            - Windows：支持 Win7+，自动适配 Bun/Node.js 运行时
-            - 构建时间：${{ github.run_at }}
+            - **Linux**: x64/arm64, glibc/musl
+            - **Windows**: x64, Bun(Win10+)/Node.js(Win7+)
+            - 构建时间: ${{ github.run_at }}
+            - 自动同步上游: ${{ needs.get-version.outputs.tag }}
           files: dist/*.tar.gz
-          draft: false
-          prerelease: false
-          overwrite_files: true  # 覆盖同名Tag的Release（避免重复发布失败）
+          overwrite_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ======================
+      # 优化4: 自动生成并更新README
+      # ======================
+      - name: 生成下载表格
+        id: generate-table
+        run: |
+          VERSION=${{ needs.get-version.outputs.tag }}
+          REPO=${{ github.repository }}
+          
+          # 生成下载表格头部
+          echo "## 📦 下载地址" > download-table.md
+          echo "" >> download-table.md
+          
+          # Linux 表格
+          echo "### Linux 版本" >> download-table.md
+          echo "| 架构 | 版本 | 下载链接 |" >> download-table.md
+          echo "|------|------|----------|" >> download-table.md
+          
+          for file in dist/*linux*.tar.gz; do
+            filename=$(basename "$file")
+            if [[ $filename == *"-glibc-"* ]]; then
+              type="glibc (主流系统)"
+            elif [[ $filename == *"-musl-"* ]]; then
+              type="musl (旧系统/NAS)"
+            fi
+            
+            if [[ $filename == *"-x64-"* ]]; then
+              arch="x64 (Intel/AMD)"
+            elif [[ $filename == *"-arm64-"* ]]; then
+              arch="arm64 (树莓派/ARM服务器)"
+            fi
+            
+            url="https://github.com/${REPO}/releases/download/${VERSION}-portable/${filename}"
+            echo "| $arch | $type | [下载]($url) |" >> download-table.md
+          done
+          
+          echo "" >> download-table.md
+          
+          # Windows 表格
+          echo "### Windows 版本" >> download-table.md
+          echo "| 运行时 | 支持系统 | 下载链接 |" >> download-table.md
+          echo "|--------|----------|----------|" >> download-table.md
+          
+          for file in dist/*windows*.tar.gz; do
+            filename=$(basename "$file")
+            if [[ $filename == *"-modern-"* ]]; then
+              runtime="Bun"
+              system="Windows 10 1809+/11"
+            elif [[ $filename == *"-legacy-"* ]]; then
+              runtime="Node.js"
+              system="Windows 7/8/8.1/10/11"
+            fi
+            
+            url="https://github.com/${REPO}/releases/download/${VERSION}-portable/${filename}"
+            echo "| $runtime | $system | [下载]($url) |" >> download-table.md
+          done
+          
+          echo "" >> download-table.md
+          echo "📝 使用说明：解压后直接运行对应脚本即可，无需安装任何依赖" >> download-table.md
+
+      - name: 更新 README.md
+        run: |
+          # 保留README中除下载部分外的所有内容
+          # 查找"## 📦 下载地址"标记，替换后面的内容
+          if grep -q "## 📦 下载地址" README.md; then
+            # 删除原有下载部分
+            sed -i '/## 📦 下载地址/,$d' README.md
+          fi
+          
+          # 追加新的下载部分
+          cat download-table.md >> README.md
+          
+          # 显示更新后的README
+          echo "✅ 更新后的README:"
+          cat README.md
+
+      - name: 提交并推送更新
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add README.md
+          git commit -m "自动更新下载链接: ${{ needs.get-version.outputs.tag }}"
+          git push origin main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
