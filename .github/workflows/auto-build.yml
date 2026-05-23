@@ -7,9 +7,6 @@ on:
 permissions:
   contents: write
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   get-version:
     runs-on: ubuntu-latest
@@ -57,11 +54,7 @@ jobs:
 
     steps:
       - name: 检出代码
-        uses: actions/checkout@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          persist-credentials: false
-          fetch-depth: 1
+        uses: actions/checkout@v4
 
       - name: 安装依赖
         run: sudo apt update && sudo apt install -y wget jq unzip
@@ -72,7 +65,7 @@ jobs:
           ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.arch }} ${{ matrix.type }}
 
       - name: 上传构建产物
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-${{ matrix.type }}-${{ matrix.arch }}
           path: dist/*.tar.gz
@@ -82,14 +75,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 检出代码
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-          persist-credentials: false
+        uses: actions/checkout@v4
 
       - name: 下载所有构建产物
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
@@ -98,7 +87,7 @@ jobs:
         run: ls -lh dist/
 
       - name: 创建/更新 GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ needs.get-version.outputs.tag }}-portable
           name: OpenCode ${{ needs.get-version.outputs.tag }} (Portable)
@@ -107,8 +96,6 @@ jobs:
             - Linux x64/arm64 (glibc/musl)
             - Windows x64 (Bun / Node.js)
           files: dist/*.tar.gz
-          overwrite_files: true
-          draft: false
-          prerelease: false
+          overwrite: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
