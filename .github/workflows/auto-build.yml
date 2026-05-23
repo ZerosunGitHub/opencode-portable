@@ -55,6 +55,11 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          # ✅ 关键修复：添加token，使用身份验证访问
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
 
       - name: 安装依赖
         run: sudo apt update && sudo apt install -y wget jq unzip
@@ -76,6 +81,11 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          # ✅ 关键修复：添加token
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
 
       - name: 下载所有构建产物
         uses: actions/download-artifact@v4
