@@ -1,150 +1,186 @@
 #!/bin/bash
 set -euo pipefail
-# 开启严格模式 + 友好的错误输出
-trap 'echo "❌ 构建失败：在第 $LINENO 行执行 $BASH_COMMAND 出错"; exit 1' ERR
 
-# ======================
-# 基础配置 & 参数校验
-# ======================
-# 参数说明：版本号 架构 构建类型(normal/musl/modern/legacy)
-if [ $# -lt 2 ]; then
-  echo "用法: $0 <版本号> <架构> [构建类型(normal/musl/modern/legacy)]"
-  echo "示例: $0 v1.0.0 x86_64 normal"
-  echo "示例: $0 v1.0.0 x64 modern"
-  exit 1
-fi
-
-VERSION="$1"
-ARCH="$2"
-BUILD_TYPE="${3:-normal}"
+# ======================================
+# 🔧 配置区（所有可修改的参数都在这里）
+# ======================================
+# 项目基础配置
+PROJECT_NAME="opencode"
 OUTPUT_DIR="dist"
-BASE_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)  # 脚本所在目录（绝对路径）
-ROOT_DIR=$(cd "$BASE_DIR/.." && pwd)                   # 项目根目录
-OUTPUT_ABS_DIR="$ROOT_DIR/$OUTPUT_DIR"
+TEMP_DIR="tmp"
 
-# 架构统一（x86_64 → x64）
-if [ "$ARCH" = "x86_64" ]; then
-  ARCH="x64"
-elif [ "$ARCH" != "arm64" ] && [ "$ARCH" != "x64" ]; then
-  echo "❌ 不支持的架构：$ARCH，仅支持 x86_64/x64、arm64"
+# 官方仓库配置
+UPSTREAM_REPO="anomalyco/opencode"
+UPSTREAM_BASE_URL="https://github.com/${UPSTREAM_REPO}/releases/download"
+UPSTREAM_ARCHIVE_URL="https://github.com/${UPSTREAM_REPO}/archive/refs/tags"
+
+# 运行时版本配置（集中管理，更新时只需改这里）
+BUN_VERSION="latest"
+NODE_VERSION="v18.20.4"  # 最后支持Win7的LTS版本
+
+# 运行时下载地址模板
+BUN_DOWNLOAD_URL="https://github.com/oven-sh/bun/releases/${BUN_VERSION}/download/bun-windows-x64.zip"
+NODE_DOWNLOAD_URL="https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-win-x64.zip"
+
+# 文件名模板（统一管理所有命名规则）
+FILENAME_TEMPLATE="${PROJECT_NAME}-{{VERSION}}-portable-{{OS}}-{{TYPE}}-{{ARCH}}.tar.gz"
+
+# ======================================
+# 🛠️ 工具函数层（通用功能）
+# ======================================
+# 错误处理函数
+trap 'echo -e "\n❌ 构建失败：在第 $LINENO 行执行命令 \"$BASH_COMMAND\" 出错"; cleanup; exit 1' ERR
+
+# 清理函数（无论成功失败都会执行）
+cleanup() {
+  echo "🧹 清理临时文件..."
+  rm -rf "$TEMP_DIR" "extracted" "opencode"
+  echo "✅ 清理完成"
+}
+
+# 带进度和重试的下载函数
+download_file() {
+  local url="$1"
+  local output="$2"
+  local retries=3
+  local retry_delay=5
+
+  echo "🔻 下载: $url"
+  for i in $(seq 1 $retries); do
+    if wget --progress=bar:force:noscroll --tries=1 "$url" -O "$output"; then
+      echo "✅ 下载成功"
+      return 0
+    fi
+    echo "⚠️ 第 $i 次下载失败，${retry_delay}秒后重试..."
+    sleep $retry_delay
+  done
+
+  echo "❌ 下载失败，已重试 $retries 次"
   exit 1
-fi
+}
 
-# 清理临时文件（保留输出目录）
-rm -rf "$ROOT_DIR/tmp" "$ROOT_DIR/extracted" "$ROOT_DIR/opencode"
-mkdir -p "$ROOT_DIR/tmp" "$ROOT_DIR/extracted" "$OUTPUT_ABS_DIR" "$ROOT_DIR/opencode/bin"
+# 替换模板变量
+render_filename() {
+  local template="$1"
+  local version="$2"
+  local os="$3"
+  local type="$4"
+  local arch="$5"
 
-echo "========================================"
-echo "📦 构建 OpenCode $VERSION | 架构:$ARCH | 类型:$BUILD_TYPE"
-echo "========================================"
+  echo "$template" | \
+    sed "s/{{VERSION}}/$version/g" | \
+    sed "s/{{OS}}/$os/g" | \
+    sed "s/{{TYPE}}/$type/g" | \
+    sed "s/{{ARCH}}/$arch/g"
+}
 
-# ======================
-# Linux 版本构建（normal/musl）
-# ======================
+# ======================================
+# 📦 构建函数层（按平台分组）
+# ======================================
+# Linux 版本构建
 build_linux() {
-  local VERSION=$1
-  local ARCH=$2
-  local BUILD_TYPE=$3
-  local FILE_URL=""
-  local FILE_SUFFIX=""
+  local version="$1"
+  local arch="$2"
+  local build_type="$3"
 
-  # 下载地址 & 后缀统一
-  if [ "$BUILD_TYPE" = "musl" ]; then
-    FILE_URL="https://github.com/anomalyco/opencode/releases/download/${VERSION}/opencode-linux-${ARCH}-musl.tar.gz"
-    FILE_SUFFIX="-musl"
+  # 确定下载地址和后缀
+  if [ "$build_type" = "musl" ]; then
+    local file_url="${UPSTREAM_BASE_URL}/${version}/opencode-linux-${arch}-musl.tar.gz"
+    local file_suffix="-musl"
   else
-    FILE_URL="https://github.com/anomalyco/opencode/releases/download/${VERSION}/opencode-linux-${ARCH}.tar.gz"
-    FILE_SUFFIX="-glibc"  # 普通版强制添加 -glibc 后缀
+    local file_url="${UPSTREAM_BASE_URL}/${version}/opencode-linux-${arch}.tar.gz"
+    local file_suffix="-glibc"
   fi
 
-  # 下载二进制包（带进度提示）
-  echo "🔻 下载官方包：$FILE_URL"
-  wget --progress=bar:force:noscroll "$FILE_URL" -O "$ROOT_DIR/tmp/opencode.tar.gz"
+  # 生成最终文件名
+  local final_filename=$(render_filename "$FILENAME_TEMPLATE" "$version" "linux" "$file_suffix" "$arch")
 
-  # 解压
-  echo "📂 解压包到临时目录..."
-  tar -xzf "$ROOT_DIR/tmp/opencode.tar.gz" -C "$ROOT_DIR/extracted/"
+  echo "========================================"
+  echo "🐧 构建 Linux 版本 | $version | $arch | $build_type"
+  echo "========================================"
 
-  # 查找并复制二进制文件（健壮性增强）
-  OPCODE_PATH=$(find "$ROOT_DIR/extracted" -type f -name "opencode" -print -quit)
-  if [ -z "$OPCODE_PATH" ]; then
+  # 准备目录
+  mkdir -p "$TEMP_DIR/linux" "opencode/bin"
+
+  # 下载和解压
+  download_file "$file_url" "$TEMP_DIR/linux/opencode.tar.gz"
+  tar -xzf "$TEMP_DIR/linux/opencode.tar.gz" -C "$TEMP_DIR/linux/extracted"
+
+  # 复制二进制文件
+  local opcode_path=$(find "$TEMP_DIR/linux/extracted" -type f -name "opencode" -print -quit)
+  if [ -z "$opcode_path" ]; then
     echo "❌ 未找到 opencode 二进制文件"
     exit 1
   fi
-  cp "$OPCODE_PATH" "$ROOT_DIR/opencode/bin/opencode"
-  chmod +x "$ROOT_DIR/opencode/bin/opencode"
+  cp "$opcode_path" "opencode/bin/opencode"
+  chmod +x "opencode/bin/opencode"
 
-  # 打包（命名和Windows统一）
-  FINAL_FILENAME="opencode-${VERSION}-portable-linux-${ARCH}${FILE_SUFFIX}.tar.gz"
-  echo "📦 打包为：$FINAL_FILENAME"
-  tar -czf "${OUTPUT_ABS_DIR}/${FINAL_FILENAME}" -C "$ROOT_DIR" opencode/
+  # 打包
+  echo "📦 打包为: $final_filename"
+  tar -czf "${OUTPUT_DIR}/${final_filename}" opencode/
 
-  # 清理临时文件
-  rm -rf "$ROOT_DIR/tmp" "$ROOT_DIR/extracted" "$ROOT_DIR/opencode"
-  echo "✅ Linux 版本构建完成！输出：$OUTPUT_ABS_DIR/$FINAL_FILENAME"
+  echo "✅ Linux 版本构建完成"
 }
 
-# ======================
-# Windows 版本构建（modern/legacy）
-# ======================
+# Windows 版本构建
 build_windows() {
-  local VERSION=$1
-  local ARCH=$2  # 固定 x64（Windows 主流）
-  local RUNTIME=$3  # modern(bun) / legacy(node)
-  local WIN_TMP_DIR="$ROOT_DIR/tmp/windows-$RUNTIME"
+  local version="$1"
+  local arch="$2"
+  local runtime="$3"
 
-  # 强制限定架构为x64
-  if [ "$ARCH" != "x64" ]; then
+  # Windows 仅支持x64
+  if [ "$arch" != "x64" ]; then
     echo "⚠️ Windows 仅支持 x64 架构，自动切换为 x64"
-    ARCH="x64"
+    arch="x64"
   fi
 
-  # 创建临时目录
-  rm -rf "$WIN_TMP_DIR"
-  mkdir -p "$WIN_TMP_DIR/runtime"
+  # 生成最终文件名
+  local final_filename=$(render_filename "$FILENAME_TEMPLATE" "$version" "windows" "$runtime" "$arch")
 
-  # 1. 下载官方 OpenCode 源码包
-  echo "🔻 下载 OpenCode $VERSION 源码包..."
-  wget --progress=bar:force:noscroll "https://github.com/anomalyco/opencode/archive/refs/tags/$VERSION.tar.gz" -O "$WIN_TMP_DIR/$VERSION.tar.gz"
-  tar xf "$WIN_TMP_DIR/$VERSION.tar.gz" --strip 1 -C "$WIN_TMP_DIR"
-  rm -f "$WIN_TMP_DIR/$VERSION.tar.gz"
+  echo "========================================"
+  echo "🪟 构建 Windows 版本 | $version | $arch | $runtime"
+  echo "========================================"
 
-  # 2. 下载对应运行时（便携版）
-  if [ "$RUNTIME" = "modern" ]; then
-    # Win10+ : Bun 便携版
-    echo "🔻 下载 Bun 便携版（Win10+）..."
-    wget --progress=bar:force:noscroll "https://github.com/oven-sh/bun/releases/latest/download/bun-windows-x64.zip" -O "$WIN_TMP_DIR/bun.zip"
-    unzip -q "$WIN_TMP_DIR/bun.zip" -d "$WIN_TMP_DIR/runtime/bun"
-    rm -f "$WIN_TMP_DIR/bun.zip"
+  # 准备目录
+  local win_temp_dir="$TEMP_DIR/windows-$runtime"
+  mkdir -p "$win_temp_dir/runtime"
+
+  # 1. 下载 OpenCode 源码
+  download_file "${UPSTREAM_ARCHIVE_URL}/${version}.tar.gz" "$win_temp_dir/source.tar.gz"
+  tar xf "$win_temp_dir/source.tar.gz" --strip 1 -C "$win_temp_dir"
+  rm -f "$win_temp_dir/source.tar.gz"
+
+  # 2. 下载对应运行时
+  if [ "$runtime" = "modern" ]; then
+    echo "🔻 下载 Bun 运行时"
+    download_file "$BUN_DOWNLOAD_URL" "$win_temp_dir/bun.zip"
+    unzip -q "$win_temp_dir/bun.zip" -d "$win_temp_dir/runtime/bun"
+    rm -f "$win_temp_dir/bun.zip"
   else
-    # Win7/8/8.1 : Node.js 18 LTS（最后支持旧版Windows）
-    echo "🔻 下载 Node.js 18 LTS 便携版（Win7/8）..."
-    wget --progress=bar:force:noscroll "https://nodejs.org/dist/v18.20.4/node-v18.20.4-win-x64.zip" -O "$WIN_TMP_DIR/node.zip"
-    unzip -q "$WIN_TMP_DIR/node.zip" -d "$WIN_TMP_DIR/runtime/node"
-    # 简化Node路径（统一调用方式）
-    mv "$WIN_TMP_DIR/runtime/node/node-v18.20.4-win-x64"/* "$WIN_TMP_DIR/runtime/node/"
-    rm -rf "$WIN_TMP_DIR/runtime/node/node-v18.20.4-win-x64"
-    rm -f "$WIN_TMP_DIR/node.zip"
+    echo "🔻 下载 Node.js 运行时"
+    download_file "$NODE_DOWNLOAD_URL" "$win_temp_dir/node.zip"
+    unzip -q "$win_temp_dir/node.zip" -d "$win_temp_dir/runtime/node"
+    # 简化Node路径
+    mv "$win_temp_dir/runtime/node/node-${NODE_VERSION}-win-x64"/* "$win_temp_dir/runtime/node/"
+    rm -rf "$win_temp_dir/runtime/node/node-${NODE_VERSION}-win-x64"
+    rm -f "$win_temp_dir/node.zip"
   fi
 
-  # 3. 生成 Windows 自动启动脚本（增强兼容性）
-  echo "📝 生成 Windows 启动脚本..."
-  cat > "$WIN_TMP_DIR/opencode.bat" << 'EOF'
+  # 3. 生成启动脚本
+  echo "📝 生成 Windows 启动脚本"
+  cat > "$win_temp_dir/opencode.bat" << 'EOF'
 @echo off
 setlocal enabledelayedexpansion
 
-:: 隐藏命令行窗口（可选，注释掉则显示窗口）
-:: if not "%1"=="hide" start mshta vbscript:CreateObject("WScript.Shell").Run("""%~0"" hide %*",0)(window.close)&&exit
-
-:: 自动检测 Windows 版本（更精准）
+:: 自动检测 Windows 版本
 set "win_version=0"
 for /f "tokens=2 delims=[]" %%i in ('ver') do (
   for /f "tokens=2" %%j in ('echo %%i ^| findstr /C:"Version"') do set "win_version=%%j"
 )
 
-:: 版本对比：Win10+ 版本号 ≥ 10.0.17763
+:: 选择运行时
 if "!win_version!" geq "10.0.17763" (
-    echo [INFO] Running on Windows 10+/Server 2019+ with Bun runtime...
+    echo [INFO] Windows 10+/Server 2019+ detected, using Bun runtime
     if exist "runtime\bun\bun.exe" (
         runtime\bun\bun.exe index.js %*
     ) else (
@@ -153,7 +189,7 @@ if "!win_version!" geq "10.0.17763" (
         exit 1
     )
 ) else (
-    echo [INFO] Running on Windows 7/8/8.1 with Node.js runtime...
+    echo [INFO] Windows 7/8/8.1 detected, using Node.js runtime
     if exist "runtime\node\node.exe" (
         runtime\node\node.exe index.js %*
     ) else (
@@ -164,19 +200,52 @@ if "!win_version!" geq "10.0.17763" (
 )
 EOF
 
-  # 4. 打包压缩（命名和Linux统一）
-  FINAL_FILENAME="opencode-${VERSION}-portable-windows-${RUNTIME}-${ARCH}.tar.gz"
-  echo "📦 打包为：$FINAL_FILENAME"
-  tar -czf "${OUTPUT_ABS_DIR}/${FINAL_FILENAME}" -C "$ROOT_DIR/tmp" "windows-$RUNTIME"
+  # 4. 打包
+  echo "📦 打包为: $final_filename"
+  tar -czf "${OUTPUT_DIR}/${final_filename}" -C "$TEMP_DIR" "windows-$runtime"
 
-  # 清理Windows临时文件
-  rm -rf "$WIN_TMP_DIR"
-  echo "✅ Windows 版本构建完成！输出：$OUTPUT_ABS_DIR/$FINAL_FILENAME"
+  echo "✅ Windows 版本构建完成"
 }
 
-# ======================
-# 主逻辑：根据构建类型分发任务
-# ======================
+# ======================================
+# 🚀 主逻辑层
+# ======================================
+# 参数校验
+if [ $# -lt 2 ]; then
+  echo "用法: $0 <版本号> <架构> [构建类型]"
+  echo "构建类型:"
+  echo "  normal  - Linux glibc 版本（默认）"
+  echo "  musl    - Linux musl 版本"
+  echo "  modern  - Windows Bun 版本（Win10+）"
+  echo "  legacy  - Windows Node.js 版本（Win7+）"
+  echo ""
+  echo "示例:"
+  echo "  $0 v1.15.5 x86_64 normal"
+  echo "  $0 v1.15.5 x64 modern"
+  exit 1
+fi
+
+# 解析参数
+VERSION="$1"
+ARCH="$2"
+BUILD_TYPE="${3:-normal}"
+
+# 架构统一
+if [ "$ARCH" = "x86_64" ]; then
+  ARCH="x64"
+elif [ "$ARCH" != "arm64" ] && [ "$ARCH" != "x64" ]; then
+  echo "❌ 不支持的架构: $ARCH"
+  echo "支持的架构: x86_64/x64, arm64"
+  exit 1
+fi
+
+# 准备目录
+mkdir -p "$OUTPUT_DIR"
+
+# 注册清理函数（脚本退出时自动执行）
+trap cleanup EXIT
+
+# 根据构建类型分发任务
 case "$BUILD_TYPE" in
   normal|musl)
     build_linux "$VERSION" "$ARCH" "$BUILD_TYPE"
@@ -185,12 +254,16 @@ case "$BUILD_TYPE" in
     build_windows "$VERSION" "$ARCH" "$BUILD_TYPE"
     ;;
   *)
-    echo "❌ 不支持的构建类型：$BUILD_TYPE"
-    echo "支持的类型：normal(musl)（Linux）、modern/legacy（Windows）"
+    echo "❌ 不支持的构建类型: $BUILD_TYPE"
+    echo "支持的类型: normal, musl, modern, legacy"
     exit 1
     ;;
 esac
 
+# 构建完成
 echo "========================================"
-echo "🎉 所有构建任务完成！输出目录：$OUTPUT_ABS_DIR"
+echo "🎉 所有构建任务完成！"
+echo "📁 输出目录: $OUTPUT_DIR"
+echo "📋 构建产物:"
+ls -lh "$OUTPUT_DIR"
 echo "========================================"
