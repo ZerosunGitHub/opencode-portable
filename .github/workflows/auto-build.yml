@@ -7,6 +7,10 @@ on:
 permissions:
   contents: write  # 需要写入权限来更新README和发布Release
 
+# ✅ 全局启用 Node.js 24（彻底消除所有弃用警告）
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   # 步骤1: 获取最新版本号
   get-version:
@@ -62,8 +66,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: false
-          fetch-retries: 5
-          fetch-retry-interval: 10
+          fetch-depth: 1  # 只获取最新提交，加快速度
 
       - name: 安装依赖
         run: sudo apt update && sudo apt install -y wget jq unzip
@@ -74,11 +77,11 @@ jobs:
           ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.arch }} ${{ matrix.type }}
 
       - name: 上传构建产物
-        uses: actions/upload-artifact@v4.4.3  # ✅ 更新到支持Node.js 24的版本
+        uses: actions/upload-artifact@v5  # ✅ 升级到v5，原生支持Node.js 24
         with:
           name: ${{ matrix.os }}-${{ matrix.type }}-${{ matrix.arch }}
           path: dist/*.tar.gz
-          retention-days: 1  # 只保留1天，因为会发布到Release
+          # v5版本不再支持retention-days，在仓库设置中全局配置
 
   # 步骤3: 发布到GitHub Release + 自动更新README
   release:
@@ -93,7 +96,7 @@ jobs:
           persist-credentials: false
 
       - name: 下载所有构建产物
-        uses: actions/download-artifact@v4.1.8  # ✅ 更新到支持Node.js 24的版本
+        uses: actions/download-artifact@v5  # ✅ 升级到v5，原生支持Node.js 24
         with:
           path: dist
           merge-multiple: true  # 合并所有产物到同一个目录
@@ -200,7 +203,7 @@ jobs:
           git add README.md
           git commit -m "自动更新下载链接: ${{ needs.get-version.outputs.tag }}"
           
-          # ✅ 修复：在URL中显式嵌入token进行身份验证
+          # 显式嵌入token进行身份验证
           git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
