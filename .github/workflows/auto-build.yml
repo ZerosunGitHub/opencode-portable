@@ -42,7 +42,15 @@ jobs:
       - name: Build musl arm64
         run: |
           ./build/build.sh ${{ steps.upstream.outputs.TAG }} arm64 musl
+      # ======================
+      # 新增：Windows 双版本构建
+      # ======================
+      - name: Build Windows Modern (Win10+, Bun)
+        run: ./build/build.sh ${{ steps.upstream.outputs.TAG }} x64 windows-modern
 
+      - name: Build Windows Legacy (Win7/8/8.1, Node.js)
+        run: ./build/build.sh ${{ steps.upstream.outputs.TAG }} x64 windows-legacy
+        
       # 自动发布所有包
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
