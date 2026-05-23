@@ -99,8 +99,8 @@ build_linux() {
   echo "🐧 构建 Linux 版本 | $version | $arch | $build_type"
   echo "========================================"
 
-  # 准备目录
-  mkdir -p "$TEMP_DIR/linux" "opencode/bin"
+  # 修复：添加 extracted 目录创建
+  mkdir -p "$TEMP_DIR/linux" "$TEMP_DIR/linux/extracted" "opencode/bin"
 
   # 下载和解压
   download_file "$file_url" "$TEMP_DIR/linux/opencode.tar.gz"
