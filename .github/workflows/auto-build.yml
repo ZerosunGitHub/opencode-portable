@@ -2,17 +2,15 @@ name: Auto Build & Release
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *'  # 每天0点构建
+    - cron: '0 0 * * *'
 
 permissions:
-  contents: write  # 需要写入权限来更新README和发布Release
+  contents: write
 
-# 全局启用 Node.js 24（彻底消除所有弃用警告）
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # 步骤1: 获取最新版本号
   get-version:
     runs-on: ubuntu-latest
     outputs:
@@ -31,15 +29,13 @@ jobs:
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
           echo "✅ 官方最新版本: $TAG"
 
-  # 步骤2: 并行构建所有版本（矩阵构建）
   build:
     needs: get-version
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false  # 一个版本失败不影响其他版本
+      fail-fast: false
       matrix:
         include:
-          # Linux 版本
           - os: linux
             arch: x86_64
             type: normal
@@ -52,7 +48,6 @@ jobs:
           - os: linux
             arch: arm64
             type: musl
-          # Windows 版本
           - os: windows
             arch: x64
             type: modern
@@ -66,12 +61,12 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: false
-          fetch-depth: 1  # 只获取最新提交，加快速度
+          fetch-depth: 1
 
       - name: 安装依赖
         run: sudo apt update && sudo apt install -y wget jq unzip
 
-      - name: 构建 ${{ matrix.os }} ${{ matrix.type }} ${{ matrix.arch }}
+      - name: 构建
         run: |
           chmod +x build/build.sh
           ./build/build.sh ${{ needs.get-version.outputs.tag }} ${{ matrix.arch }} ${{ matrix.type }}
@@ -82,15 +77,14 @@ jobs:
           name: ${{ matrix.os }}-${{ matrix.type }}-${{ matrix.arch }}
           path: dist/*.tar.gz
 
-  # 步骤3: 发布到GitHub Release + 自动更新README
   release:
     needs: [get-version, build]
     runs-on: ubuntu-latest
     steps:
-      - name: 检出代码（用于更新README）
+      - name: 检出代码
         uses: actions/checkout@v5
         with:
-          fetch-depth: 0  # 获取完整历史
+          fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: false
 
@@ -98,9 +92,9 @@ jobs:
         uses: actions/download-artifact@v5
         with:
           path: dist
-          merge-multiple: true  # 合并所有产物到同一个目录
+          merge-multiple: true
 
-      - name: 列出所有产物
+      - name: 列出产物
         run: ls -lh dist/
 
       - name: 创建/更新 GitHub Release
@@ -109,101 +103,12 @@ jobs:
           tag_name: ${{ needs.get-version.outputs.tag }}-portable
           name: OpenCode ${{ needs.get-version.outputs.tag }} (Portable)
           body: |
-            🚀 自动构建的便携版 OpenCode
-            - **Linux**: x64/arm64, glibc/musl
-            - **Windows**: x64, Bun(Win10+)/Node.js(Win7+)
-            - 构建时间: ${{ github.run_at }}
-            - 自动同步上游: ${{ needs.get-version.outputs.tag }}
+            🚀 自动构建便携版
+            - Linux x64/arm64 (glibc/musl)
+            - Windows x64 (Bun / Node.js)
           files: dist/*.tar.gz
           overwrite_files: true
           draft: false
           prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # 自动生成并更新README
-      - name: 生成下载表格
-        id: generate-table
-        run: |
-          VERSION=${{ needs.get-version.outputs.tag }}
-          REPO=${{ github.repository }}
-          
-          # 生成下载表格头部
-          echo "## 📦 下载地址" > download-table.md
-          echo "" >> download-table.md
-          
-          # Linux 表格
-          echo "### Linux 版本" >> download-table.md
-          echo "| 架构 | 版本 | 下载链接 |" >> download-table.md
-          echo "|------|------|----------|" >> download-table.md
-          
-          for file in dist/*linux*.tar.gz; do
-            filename=$(basename "$file")
-            if [[ $filename == *"-glibc-"* ]]; then
-              type="glibc (主流系统)"
-            elif [[ $filename == *"-musl-"* ]]; then
-              type="musl (旧系统/NAS)"
-            fi
-            
-            if [[ $filename == *"-x64-"* ]]; then
-              arch="x64 (Intel/AMD)"
-            elif [[ $filename == *"-arm64-"* ]]; then
-              arch="arm64 (树莓派/ARM服务器)"
-            fi
-            
-            url="https://github.com/${REPO}/releases/download/${VERSION}-portable/${filename}"
-            echo "| $arch | $type | [下载]($url) |" >> download-table.md
-          done
-          
-          echo "" >> download-table.md
-          
-          # Windows 表格
-          echo "### Windows 版本" >> download-table.md
-          echo "| 运行时 | 支持系统 | 下载链接 |" >> download-table.md
-          echo "|--------|----------|----------|" >> download-table.md
-          
-          for file in dist/*windows*.tar.gz; do
-            filename=$(basename "$file")
-            if [[ $filename == *"-modern-"* ]]; then
-              runtime="Bun"
-              system="Windows 10 1809+/11"
-            elif [[ $filename == *"-legacy-"* ]]; then
-              runtime="Node.js"
-              system="Windows 7/8/8.1/10/11"
-            fi
-            
-            url="https://github.com/${REPO}/releases/download/${VERSION}-portable/${filename}"
-            echo "| $runtime | $system | [下载]($url) |" >> download-table.md
-          done
-          
-          echo "" >> download-table.md
-          echo "📝 使用说明：解压后直接运行对应脚本即可，无需安装任何依赖" >> download-table.md
-
-      - name: 更新 README.md
-        run: |
-          # 保留README中除下载部分外的所有内容
-          if grep -q "## 📦 下载地址" README.md; then
-            # 删除原有下载部分
-            sed -i '/## 📦 下载地址/,$d' README.md
-          fi
-          
-          # 追加新的下载部分
-          cat download-table.md >> README.md
-          
-          # 显示更新后的README
-          echo "✅ 更新后的README:"
-          cat README.md
-
-      - name: 提交并推送更新
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # ✅ 修复：只强制提交README.md，忽略其他临时文件
-          git add -f README.md
-          git commit -m "自动更新下载链接: ${{ needs.get-version.outputs.tag }}"
-          
-          # 显式嵌入token进行身份验证
-          git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
