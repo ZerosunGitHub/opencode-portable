@@ -98,7 +98,7 @@ EOF
 
   # 4. 打包压缩
   cd ..
-  tar -zcf opencode-windows-$RUNTIME-x64.tar.gz opencode-windows-$RUNTIME-x64
-  rm -rf opencode-windows-$RUNTIME-x64
+  # 修复后：带版本号，和Linux命名统一
+  tar -zcf "${TAG}-windows-${RUNTIME}-x64.tar.gz" opencode-windows-$RUNTIME-x64  rm -rf opencode-windows-$RUNTIME-x64
   cd ../..
 }
