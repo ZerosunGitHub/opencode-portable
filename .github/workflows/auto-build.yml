@@ -56,7 +56,6 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
         with:
-          # ✅ 关键修复：添加token，使用身份验证访问
           token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: false
           fetch-depth: 1
@@ -82,7 +81,6 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
         with:
-          # ✅ 关键修复：添加token
           token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: false
           fetch-depth: 1
@@ -97,15 +95,16 @@ jobs:
         run: ls -lh dist/
 
       - name: 创建/更新 GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.get-version.outputs.tag }}-portable
           name: OpenCode ${{ needs.get-version.outputs.tag }} (Portable)
           body: |
-            🚀 便携版
+            🚀 自动构建便携版
             - Linux x64/arm64 (glibc/musl)
             - Windows x64 (Bun / Node.js)
           files: dist/*.tar.gz
+          overwrite_files: true  # ✅ 强制覆盖旧文件，**杜绝重复**
           draft: false
           prerelease: false
         env:
